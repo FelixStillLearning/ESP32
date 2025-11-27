@@ -1,0 +1,41 @@
+# Arduino/ESP32 gitignore
+
+# Build artifacts
+*.bin
+*.elf
+*.hex
+*.map
+*.lst
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Arduino IDE
+*.autosave
+*.bak
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Logs
+*.log
+
+# Credentials (IMPORTANT!)
+secrets.h
+config_local.h
+
+# Build directories
+build/
+bin/
+obj/
