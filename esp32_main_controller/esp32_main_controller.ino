@@ -1,14 +1,3 @@
-/*
- * ESP32 Smart Home Main Controller
- * FIXED VERSION - Tested & Working
- * 
- * Hardware Test Results:
- * ✅ LCD I2C: 0x27
- * ✅ DHT22: 27.8°C, 81%
- * ✅ LDR: 4095 (working)
- * ✅ MQ-2: 1518 (working)
- */
-
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
@@ -22,38 +11,38 @@ const char* WIFI_SSID = "FELIXTHE3RD";
 const char* WIFI_PASS = "superadmin";
 
 // ==================== MQTT Configuration ====================
-const char* MQTT_SERVER = "10.224.227.57";  // IP Mosquitto broker
+const char* MQTT_SERVER = "broker.hivemq.com"; 
 const int MQTT_PORT = 1883;
 const char* MQTT_USER = "";
 const char* MQTT_PASS = "";
 
 // MQTT Topics - Publish (Sensor Data)
-const char* TOPIC_TEMPERATURE = "home/temperature";
-const char* TOPIC_HUMIDITY = "home/humidity";
-const char* TOPIC_GAS = "home/gas";
-const char* TOPIC_LIGHT = "home/light";
+const char* TOPIC_TEMPERATURE = "iotcihuy/home/temperature";
+const char* TOPIC_HUMIDITY = "iotcihuy/home/humidity";
+const char* TOPIC_GAS = "iotcihuy/home/gas";
+const char* TOPIC_LIGHT = "iotcihuy/home/light";
 
 // MQTT Topics - Subscribe (Control Commands)
-const char* TOPIC_LAMP_CONTROL = "home/lamp/control";
-const char* TOPIC_DOOR_CONTROL = "home/door/control";
+const char* TOPIC_LAMP_CONTROL = "iotcihuy/home/lamp/control";
+const char* TOPIC_DOOR_CONTROL = "iotcihuy/home/door/control";
 
 // MQTT Topics - Status (Feedback to server)
-const char* TOPIC_LAMP_STATUS = "home/lamp/status";
-const char* TOPIC_DOOR_STATUS = "home/door/status";
+const char* TOPIC_LAMP_STATUS = "iotcihuy/home/lamp/status";
+const char* TOPIC_DOOR_STATUS = "iotcihuy/home/door/status";
 
 // ==================== Pin Definitions ====================
-// DHT Sensor - FIXED: DHT22 not DHT11!
+// DHT Sensor 
 #define DHT_PIN 13
 #define DHT_TYPE DHT22
 
-// Analog Sensors - GPIO12 kadang bermasalah, pindah ke GPIO lain
-#define LDR_PIN 32   // Pindah dari GPIO 12 ke GPIO 32 (ADC1_CH4)
-#define MQ2_PIN 33   // Pindah dari GPIO 14 ke GPIO 33 (ADC1_CH5)
+// Analog Sensors 
+#define LDR_PIN 32   
+#define MQ2_PIN 33   
 
 // Relay
 #define RELAY_PIN 27
 
-// LCD I2C - FIXED: Address 0x27
+// LCD I2C 
 #define LCD_ADDR 0x27
 #define LCD_COLS 16
 #define LCD_ROWS 2
@@ -94,6 +83,8 @@ const unsigned long MQTT_INTERVAL = 5000;
 
 String enteredPin = "";
 const String CORRECT_PIN = "1234";
+int mq2Baseline = 0;
+bool mq2Calibrated = false;
 
 int displayMode = 0;
 unsigned long lastDisplayChange = 0;
@@ -132,6 +123,39 @@ void setup() {
 
   dht.begin();
   delay(2000);  // DHT22 needs time to stabilize
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Calibrating MQ2");
+  lcd.setCursor(0, 1);
+  lcd.print("Wait 10 sec...");
+  
+  delay(5000);
+  
+  long sum = 0;
+  int samples = 20;
+  
+  for (int i = 0; i < samples; i++) {
+    sum += analogRead(MQ2_PIN);
+    delay(200);
+    
+    if (i % 5 == 0) {
+      lcd.setCursor(14, 1);
+      lcd.print(i * 5);
+      lcd.print("%");
+    }
+  }
+  
+  mq2Baseline = sum / samples;
+  mq2Calibrated = true;
+  
+  Serial.printf(" MQ-2 Baseline calibrated: %d (ADC)\n", mq2Baseline);
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("MQ2 Ready!");
+  lcd.setCursor(0, 1);
+  lcd.printf("Base: %d ADC", mq2Baseline);
+  delay(2000);
 
   setupWiFi();
   setupMQTT();
@@ -143,7 +167,7 @@ void setup() {
   lcd.print(WiFi.localIP());
   delay(2000);
 
-  Serial.println("✅ System initialized successfully!");
+  Serial.println(" System initialized successfully!");
 }
 
 // ==================== Main Loop ====================
@@ -194,7 +218,7 @@ void setupWiFi() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ WiFi Connected!");
+    Serial.println("\n WiFi Connected!");
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
 
@@ -205,7 +229,7 @@ void setupWiFi() {
     lcd.print(WiFi.localIP());
     delay(1500);
   } else {
-    Serial.println("\n❌ WiFi Connection Failed!");
+    Serial.println("\n WiFi Connection Failed!");
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("WiFi Failed!");
@@ -231,7 +255,7 @@ void reconnectMQTT() {
     String clientId = "ESP32-SmartHome-" + String(random(0xffff), HEX);
 
     if (mqtt.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
-      Serial.println("✅ Connected!");
+      Serial.println(" Connected!");
 
       mqtt.subscribe(TOPIC_LAMP_CONTROL);
       mqtt.subscribe(TOPIC_DOOR_CONTROL);
@@ -245,7 +269,7 @@ void reconnectMQTT() {
       lcd.print("MQTT Connected!");
       delay(500);
     } else {
-      Serial.print("❌ Failed, rc=");
+      Serial.print(" Failed, rc=");
       Serial.print(mqtt.state());
       Serial.println(" Retrying in 5 seconds...");
 
@@ -263,7 +287,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     message += (char)payload[i];
   }
 
-  Serial.println("📥 MQTT Message:");
+  Serial.println(" MQTT Message:");
   Serial.println("  Topic: " + String(topic));
   Serial.println("  Payload: " + message);
 
@@ -271,7 +295,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   DeserializationError error = deserializeJson(doc, message);
 
   if (error) {
-    Serial.println("❌ JSON parsing failed!");
+    Serial.println(" JSON parsing failed!");
     return;
   }
 
@@ -311,27 +335,50 @@ void readSensors() {
     humidity = newHumid;
   }
 
-  // Read MQ-2 Gas sensor (raw ADC value: 0-4095)
   int mq2Raw = analogRead(MQ2_PIN);
-  // Convert to PPM - use constrain to ensure valid range
-  gasValue = constrain(map(mq2Raw, 0, 4095, 0, 1000), 0, 1000);
   
-  // Alternative: just use raw value scaled down
-  // gasValue = mq2Raw / 4;  // Scale 0-4095 to ~0-1000
-
-  // Read LDR (raw ADC value: 0-4095)
+  if (mq2Calibrated) {
+    int difference = mq2Raw - mq2Baseline;
+    
+    if (difference < 0) {
+      difference = 0;
+    }
+    
+    const int MQ2_THRESHOLD = 100;
+    
+    if (difference < MQ2_THRESHOLD) {
+      gasValue = 0;
+    } else {
+      gasValue = constrain(map(difference, MQ2_THRESHOLD, 1500, 0, 1000), 0, 1000);
+    }
+  } else {
+    gasValue = constrain(map(mq2Raw, 0, 4095, 0, 1000), 0, 1000);
+  }
+  
   int ldrRaw = analogRead(LDR_PIN);
-  // LDR inverse: higher raw = brighter light
-  // Scale to 0-1000 lux range
-  lightValue = constrain(map(ldrRaw, 0, 4095, 0, 1000), 0, 1000);
+  lightValue = 1000 - constrain(map(ldrRaw, 0, 4095, 0, 1000), 0, 1000);
   
-  // Alternative: just use raw value scaled down
-  // lightValue = ldrRaw / 4;  // Scale 0-4095 to ~0-1000
 
-  Serial.println("📊 Sensor Readings:");
+  Serial.println(" Sensor Readings:");
   Serial.printf("  Temperature: %.1f°C\n", temperature);
   Serial.printf("  Humidity: %.1f%%\n", humidity);
-  Serial.printf("  Gas (MQ2 raw): %d, PPM: %d\n", mq2Raw, gasValue);
+  if (mq2Calibrated) {
+    int diff = mq2Raw - mq2Baseline;
+    Serial.printf("  Gas - Raw: %d, Baseline: %d, Diff: %d → PPM: %d", 
+                  mq2Raw, mq2Baseline, diff, gasValue);
+    
+    if (gasValue == 0) {
+      Serial.println(" (Clean )");
+    } else if (gasValue < 200) {
+      Serial.println(" (Normal )");
+    } else if (gasValue < 500) {
+      Serial.println(" (Warning )");
+    } else {
+      Serial.println(" (DANGER )");
+    }
+  } else {
+    Serial.printf("  Gas (MQ2 raw): %d, PPM: %d\n", mq2Raw, gasValue);
+  }
   Serial.printf("  Light (LDR raw): %d, Lux: %d\n", ldrRaw, lightValue);
 }
 
@@ -348,7 +395,7 @@ void publishSensorData() {
   doc["unit"] = "celsius";
   serializeJson(doc, buffer);
   mqtt.publish(TOPIC_TEMPERATURE, buffer);
-  Serial.println("📤 Published temperature");
+  Serial.println(" Published temperature");
 
   // Publish Humidity
   doc.clear();
@@ -356,21 +403,21 @@ void publishSensorData() {
   doc["unit"] = "percent";
   serializeJson(doc, buffer);
   mqtt.publish(TOPIC_HUMIDITY, buffer);
-  Serial.println("📤 Published humidity");
+  Serial.println(" Published humidity");
 
   // Publish Gas
   doc.clear();
   doc["ppm"] = gasValue;
   serializeJson(doc, buffer);
   mqtt.publish(TOPIC_GAS, buffer);
-  Serial.println("📤 Published gas");
+  Serial.println(" Published gas");
 
   // Publish Light
   doc.clear();
   doc["lux"] = lightValue;
   serializeJson(doc, buffer);
   mqtt.publish(TOPIC_LIGHT, buffer);
-  Serial.println("📤 Published light");
+  Serial.println(" Published light");
 }
 
 // ==================== Device Control ====================
@@ -380,7 +427,7 @@ void controlLamp(bool state, String mode) {
 
   digitalWrite(RELAY_PIN, state ? LOW : HIGH);
 
-  Serial.printf("💡 Lamp: %s (%s mode)\n", state ? "ON" : "OFF", mode.c_str());
+  Serial.printf(" Lamp: %s (%s mode)\n", state ? "ON" : "OFF", mode.c_str());
 
   StaticJsonDocument<128> doc;
   char buffer[128];
@@ -402,7 +449,7 @@ void controlLamp(bool state, String mode) {
 void controlDoor(bool lock, String method) {
   doorLocked = lock;
 
-  Serial.printf("🚪 Door: %s (%s)\n", lock ? "LOCKED" : "UNLOCKED", method.c_str());
+  Serial.printf(" Door: %s (%s)\n", lock ? "LOCKED" : "UNLOCKED", method.c_str());
 
   StaticJsonDocument<128> doc;
   char buffer[128];
@@ -426,11 +473,11 @@ void handleKeypad() {
   char key = keypad.getKey();
 
   if (key) {
-    Serial.printf("🔢 Key pressed: %c\n", key);
+    Serial.printf(" Key pressed: %c\n", key);
 
     if (key == '#') {
       if (enteredPin == CORRECT_PIN) {
-        Serial.println("✅ PIN Correct!");
+        Serial.println(" PIN Correct!");
         controlDoor(!doorLocked, "keypad");
         lcd.clear();
         lcd.setCursor(0, 0);
@@ -438,7 +485,7 @@ void handleKeypad() {
         lcd.setCursor(0, 1);
         lcd.print(doorLocked ? "Locked" : "Unlocked");
       } else {
-        Serial.println("❌ PIN Incorrect!");
+        Serial.println(" PIN Incorrect!");
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("Wrong PIN!");
