@@ -119,6 +119,11 @@ unsigned long doorUnlockTimer = 0;
 bool doorAutoLockPending = false;
 const unsigned long DOOR_UNLOCK_DURATION = 5000;  // 5 seconds
 
+// Buzzer control (from backend)
+bool buzzerState = false;
+unsigned long lastBuzzerToggle = 0;
+const unsigned long BUZZER_BEEP_INTERVAL = 500;  // Beep setiap 500ms saat danger
+
 bool dfPlayerReady = false;
 
 // DFPlayer Voice Track Numbers (save as 0001.mp3, 0002.mp3, etc. on SD card)
@@ -629,16 +634,11 @@ void playVoice(int trackNumber) {
   }
 }
 
-// Buzzer continuous control (from backend)
-bool buzzerState = false;
-unsigned long lastBuzzerToggle = 0;
-const unsigned long BUZZER_BEEP_INTERVAL = 500;  // Beep setiap 500ms saat danger
-
 void controlBuzzer(bool state) {
   buzzerState = state;
   
   if (state) {
-    Serial.println("[Buzzer] 🚨 DANGER ALERT - Buzzer ON");
+    Serial.println("[Buzzer] DANGER ALERT - Buzzer ON");
     // Play voice alert
     playVoice(VOICE_GAS_ALERT);
   } else {
