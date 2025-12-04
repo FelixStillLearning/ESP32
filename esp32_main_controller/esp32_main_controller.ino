@@ -631,8 +631,8 @@ void handleKeypad() {
         soundBuzzer(1);  // Success beep
         playVoice(VOICE_CORRECT_PIN);
         
-        // Always unlock door when PIN correct (not toggle)
-        controlDoor(false, "keypad");  // false = unlock
+
+        controlDoor(false, "pin"); 
 
         lcd.clear();
         lcd.setCursor(0, 0);
