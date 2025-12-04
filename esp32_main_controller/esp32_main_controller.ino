@@ -29,6 +29,7 @@ const char* TOPIC_LIGHT = "iotcihuy/home/light";
 const char* TOPIC_LAMP_CONTROL = "iotcihuy/home/lamp/control";
 const char* TOPIC_DOOR_CONTROL = "iotcihuy/home/door/control";
 const char* TOPIC_CURTAIN_CONTROL = "iotcihuy/home/curtain/control";
+const char* TOPIC_BUZZER_CONTROL = "iotcihuy/home/buzzer/control";
 
 // MQTT Topics - Status (Feedback to server)
 const char* TOPIC_LAMP_STATUS = "iotcihuy/home/lamp/status";
@@ -146,6 +147,7 @@ void playVoice(int trackNumber);
 void checkGasAlert();
 void soundBuzzer(int count);
 void checkDoorAutoLock();
+void controlBuzzer(bool state);
 
 // ==================== Setup ====================
 void setup() {
@@ -251,7 +253,8 @@ void loop() {
 
   if (millis() - lastSensorRead >= SENSOR_INTERVAL) {
     readSensors();
-    checkGasAlert();
+    // Note: Gas alert sekarang dikontrol dari backend via MQTT
+    // checkGasAlert() tidak dipanggil lagi di sini
     lastSensorRead = millis();
   }
 
@@ -269,6 +272,14 @@ void loop() {
   if (showingMessage && (millis() - lcdMessageTimer >= 3000)) {
     showingMessage = false;
     updateLCD();
+  }
+
+  // Continuous buzzer beeping when danger alert active (from backend)
+  if (buzzerState) {
+    if (millis() - lastBuzzerToggle >= BUZZER_BEEP_INTERVAL) {
+      digitalWrite(BUZZER_PIN, !digitalRead(BUZZER_PIN));  // Toggle buzzer
+      lastBuzzerToggle = millis();
+    }
   }
 }
 
@@ -322,6 +333,7 @@ void reconnectMQTT() {
       mqtt.subscribe(TOPIC_LAMP_CONTROL);
       mqtt.subscribe(TOPIC_DOOR_CONTROL);
       mqtt.subscribe(TOPIC_CURTAIN_CONTROL);
+      mqtt.subscribe(TOPIC_BUZZER_CONTROL);
 
       Serial.println("Subscribed to control topics");
     } else {
@@ -393,6 +405,20 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       controlCurtain(false);
     } else if (action == "toggle") {
       controlCurtain(!curtainOpen);
+    }
+  }
+
+  // Buzzer Control (from backend gas alert)
+  if (topicStr == TOPIC_BUZZER_CONTROL) {
+    String action = doc["action"] | "";
+    String source = doc["source"] | "manual";
+
+    Serial.printf("[MQTT] Buzzer command: %s (source: %s)\n", action.c_str(), source.c_str());
+
+    if (action == "on") {
+      controlBuzzer(true);
+    } else if (action == "off") {
+      controlBuzzer(false);
     }
   }
 }
@@ -600,6 +626,24 @@ void playVoice(int trackNumber) {
   if (dfPlayerReady) {
     dfPlayer.play(trackNumber);
     Serial.printf("[Voice] Playing track %d\n", trackNumber);
+  }
+}
+
+// Buzzer continuous control (from backend)
+bool buzzerState = false;
+unsigned long lastBuzzerToggle = 0;
+const unsigned long BUZZER_BEEP_INTERVAL = 500;  // Beep setiap 500ms saat danger
+
+void controlBuzzer(bool state) {
+  buzzerState = state;
+  
+  if (state) {
+    Serial.println("[Buzzer] 🚨 DANGER ALERT - Buzzer ON");
+    // Play voice alert
+    playVoice(VOICE_GAS_ALERT);
+  } else {
+    Serial.println("[Buzzer] Gas level safe - Buzzer OFF");
+    digitalWrite(BUZZER_PIN, LOW);
   }
 }
 
